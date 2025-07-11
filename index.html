@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Expense Tracker + กราฟและสรุปยอด</title>
+
+<!-- PWA -->
+<meta name="theme-color" content="#3f51b5" />
+<link rel="manifest" href="manifest.json" />
+
+<style>
+  /* (ใช้ CSS และโค้ดเหมือนเดิมที่เคยให้ไปครับ) */
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    max-width: 600px;
+    margin: 30px auto;
+    padding: 20px;
+    background: #f4f6f8;
+    color: #333;
+  }
+  h2, h3 {
+    text-align: center;
+    color: #222;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+    font-weight: 600;
+  }
+  input, select {
+    width: 100%;
+    padding: 12px 15px;
+    margin-top: 6px;
+    border: 1.8px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+  }
+  input:focus, select:focus {
+    border-color: #3f51b5;
+    outline: none;
+  }
+  button#addBtn {
+    margin-top: 25px;
+    width: 100%;
+    background-color: #3f51b5;
+    color: white;
+    border: none;
+    padding: 15px 0;
+    font-size: 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(63, 81, 181, 0.3);
+    transition: background-color 0.3s ease;
+  }
+  button#addBtn:hover {
+    background-color: #303f9f;
+  }
+  .status {
+    margin-top: 12px;
+    height: 24px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .status.error {
+    color: #d32f2f;
+  }
+  .status.success {
+    color: #388e3c;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 35px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 14px 18px;
+    text-align: left;
+  }
+  thead {
+    background-color: #3f51b5;
+    color: white;
+    font-weight: 700;
+  }
+  tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  tbody tr:hover {
+    background-color: #e3e9ff;
+  }
+  .income {
+    color: #2e7d32;
+    font-weight: 600;
+  }
+  .expense {
+    color: #c62828;
+    font-weight: 600;
+  }
+  button.deleteBtn {
+    background-color: #d32f2f;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+  }
+  button.deleteBtn:hover {
+    background-color: #b71c1c;
+  }
+  #summary {
+    margin-top: 30px;
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+  }
+  #chartContainer {
+    margin-top: 25px;
+  }
+  @media (max-width: 480px) {
+    body { margin: 10px; padding: 10px; }
+    input, select, button#addBtn { font-size: 16px; padding: 12px 10px; }
+    th, td { padding: 10px 8px; font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<h2>บันทึกรายรับรายจ่าย พร้อมกราฟและสรุปยอด</h2>
+
+<label for="date">วันที่:</label>
+<input type="date" id="date" />
+
+<label for="type">ประเภท:</label>
+<select id="type">
+    <option value="income">รายรับ</option>
+    <option value="expense">รายจ่าย</option>
+</select>
+
+<label for="category">หมวดหมู่:</label>
+<input type="text" id="category" placeholder="เช่น เงินเดือน, อาหาร" />
+
+<label for="amount">จำนวนเงิน (บาท):</label>
+<input type="number" id="amount" min="0" step="0.01" />
+
+<button id="addBtn">เพิ่มรายการ</button>
+
+<div class="status" id="status"></div>
+
+<h3>รายการทั้งหมด</h3>
+<table id="table">
+    <thead>
+        <tr>
+            <th>วันที่</th>
+            <th>ประเภท</th>
+            <th>หมวดหมู่</th>
+            <th>จำนวนเงิน (บาท)</th>
+            <th>จัดการ</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<div id="summary">
+    <p>รวมรายรับ: <span id="totalIncome">0.00</span> บาท</p>
+    <p>รวมรายจ่าย: <span id="totalExpense">0.00</span> บาท</p>
+    <p>ยอดคงเหลือ: <span id="balance">0.00</span> บาท</p>
+</div>
+
+<div id="chartContainer">
+    <canvas id="pieChart" width="400" height="400"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const dateInput = document.getElementById("date");
+    const typeInput = document.getElementById("type");
+    const categoryInput = document.getElementById("category");
+    const amountInput = document.getElementById("amount");
+    const addBtn = document.getElementById("addBtn");
+    const statusDiv = document.getElementById("status");
+    const tbody = document.querySelector("#table tbody");
+
+    const totalIncomeSpan = document.getElementById("totalIncome");
+    const totalExpenseSpan = document.getElementById("totalExpense");
+    const balanceSpan = document.getElementById("balance");
+
+    dateInput.valueAsDate = new Date();
+
+    let transactions = JSON.parse(localStorage.getItem("transactions") || "[]");
+    let pieChart = null;
+
+    function saveTransactions() {
+        localStorage.setItem("transactions", JSON.stringify(transactions));
+    }
+
+    function calculateSummary() {
+        let income = 0;
+        let expense = 0;
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            if (t.type === "income") income += amt;
+            else expense += amt;
+        });
+        return { income, expense, balance: income - expense };
+    }
+
+    function renderSummary() {
+        const summary = calculateSummary();
+        totalIncomeSpan.textContent = summary.income.toFixed(2);
+        totalExpenseSpan.textContent = summary.expense.toFixed(2);
+        balanceSpan.textContent = summary.balance.toFixed(2);
+    }
+
+    function renderChart() {
+        const summary = calculateSummary();
+        const ctx = document.getElementById('pieChart').getContext('2d');
+
+        if (pieChart) {
+            pieChart.destroy();
+        }
+        pieChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['รายรับ', 'รายจ่าย'],
+                datasets: [{
+                    data: [summary.income, summary.expense],
+                    backgroundColor: ['#2e7d32', '#c62828'],
+                    hoverOffset: 30
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(2)} บาท`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderTable() {
+        tbody.innerHTML = "";
+        transactions.forEach((t, index) => {
+            const tr = document.createElement("tr");
+
+            const dateTd = document.createElement("td");
+            dateTd.textContent = t.date;
+            tr.appendChild(dateTd);
+
+            const typeTd = document.createElement("td");
+            typeTd.textContent = t.type === "income" ? "รายรับ" : "รายจ่าย";
+            typeTd.className = t.type;
+            tr.appendChild(typeTd);
+
+            const categoryTd = document.createElement("td");
+            categoryTd.textContent = t.category;
+            tr.appendChild(categoryTd);
+
+            const amountTd = document.createElement("td");
+            amountTd.textContent = parseFloat(t.amount).toFixed(2);
+            tr.appendChild(amountTd);
+
+            const delTd = document.createElement("td");
+            const delBtn = document.createElement("button");
+            delBtn.textContent = "ลบ";
+            delBtn.className = "deleteBtn";
+            delBtn.onclick = () => {
+                if(confirm("คุณต้องการลบรายการนี้หรือไม่?")) {
+                    transactions.splice(index, 1);
+                    saveTransactions();
+                    renderTable();
+                    renderSummary();
+                    renderChart();
+                    statusDiv.textContent = "✅ ลบรายการเรียบร้อยแล้ว";
+                    statusDiv.className = "status success";
+                }
+            };
+            delTd.appendChild(delBtn);
+            tr.appendChild(delTd);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    addBtn.onclick = () => {
+        const date = dateInput.value;
+        const type = typeInput.value;
+        const category = categoryInput.value.trim();
+        const amount = amountInput.value;
+
+        if(!date || !type || !category || !amount || amount <= 0) {
+            statusDiv.textContent = "❌ กรุณากรอกข้อมูลให้ครบและถูกต้อง";
+            statusDiv.className = "status error";
+            return;
+        }
+
+        transactions.push({ date, type, category, amount });
+        saveTransactions();
+        renderTable();
+        renderSummary();
+        renderChart();
+
+        statusDiv.textContent = "✅ บันทึกรายการเรียบร้อยแล้ว";
+        statusDiv.className = "status success";
+
+        categoryInput.value = "";
+        amountInput.value = "";
+    };
+
+    renderTable();
+    renderSummary();
+    renderChart();
+</script>
+
+<script>
+  // ลงทะเบียน Service Worker สำหรับ PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        console.log('Service Worker registered.', reg);
+      }).catch(err => {
+        console.log('Service Worker registration failed:', err);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
